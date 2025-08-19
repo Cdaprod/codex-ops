@@ -52,15 +52,24 @@ jobs:
     needs: rewrite
     steps:
       - uses: actions/checkout@v4
+      - name: Check GitHub App secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.APP_ID }}" ] || [ -z "${{ secrets.APP_PRIVATE_KEY }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: App Installation Token
+        if: steps.check-secrets.outputs.skip != 'true'
         id: app
         uses: tibdex/github-app-token@v2
         with:
           app_id: ${{ secrets.APP_ID }}
           private_key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Auth gh
+        if: steps.check-secrets.outputs.skip != 'true'
         run: echo "${{ steps.app.outputs.token }}" | gh auth login --with-token
       - name: Open PRs to target repos
+        if: steps.check-secrets.outputs.skip != 'true'
         env:
           TOKEN: ${{ steps.app.outputs.token }}
         run: |
