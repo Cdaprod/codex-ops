@@ -1,5 +1,7 @@
 # Codex Ops
 
+[![Sponsors • Rewrite Page](https://github.com/Cdaprod/codex-ops/actions/workflows/sponsors.yml/badge.svg)](https://github.com/Cdaprod/codex-ops/actions/workflows/sponsors.yml)
+
 Substrate repository for codex work.
 
 ## Sponsors
