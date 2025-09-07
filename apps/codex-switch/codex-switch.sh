@@ -177,45 +177,71 @@ show_unhealthy_logs() {
   done
 }
 
+
+# ------------------------ branch selection ------------------------
+recent_pr_branch() {
+  local b=""
+  if have gh; then
+    b="$(gh pr list --state open --limit 1 --sort updated --json headRefName -q '.[0].headRefName' 2>/dev/null || true)"
+    if [[ -z "$b" ]]; then
+      b="$(gh pr list --state all --limit 1 --sort updated --json headRefName -q '.[0].headRefName' 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$b" ]]; then
+    b="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  fi
+  printf "%s" "$b"
+}
+
 # ------------------------ main flow ------------------------
-ORIG="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
-read -rp "Codex branch to switch to [${ORIG}]: " INPUT
-BRANCH="${INPUT:-$ORIG}"
+main() {
+  local ORIG PLACEHOLDER BRANCH INPUT OUT
+  ORIG="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  PLACEHOLDER="$(recent_pr_branch)"
+  if is_tty; then
+    read -rp "Codex branch to switch to [$(dim "$PLACEHOLDER")]: " INPUT || INPUT=""
+    BRANCH="${INPUT:-$PLACEHOLDER}"
+  else
+    BRANCH="$PLACEHOLDER"
+    echo "$(now) [INFO] Non-interactive; using branch: $BRANCH"
+  fi
 
-# temp output buffer so we can also send to clipboard cleanly
-OUT="$(mktemp -t codex-switch.XXXXXX)"
+  OUT="$(mktemp -t codex-switch.XXXXXX)"
 
-restore() {
+  restore() {
+    {
+      echo "$(now) [INFO] Restoring original branch: $ORIG"
+      if git switch -q "$ORIG" 2>/dev/null; then
+        echo "$(now) [OK] Back on $ORIG"
+      else
+        echo "$(now) [WARN] Could not return to $ORIG; check your working tree." >&2
+      fi
+    } >>"$OUT" 2>&1
+  }
+  trap restore EXIT
+
   {
-    echo "$(now) [INFO] Restoring original branch: $ORIG"
-    if git switch -q "$ORIG" 2>/dev/null; then
-      echo "$(now) [OK] Back on $ORIG"
+    echo "$(now) [INFO] Original branch: $ORIG"
+    echo "$(now) [INFO] Switching to branch: $BRANCH"
+
+    if git switch "$BRANCH"; then
+      echo "$(now) [INFO] Restarting containers…"
+      if dc restart; then
+        wait_for_health_tui "${CODEX_TIMEOUT:-180}" "${CODEX_POLL:-1}"
+        echo "$(now) [INFO] Inspecting unhealthy services (if any)…"
+        show_unhealthy_logs "${CODEX_LOG_TAIL:-80}"
+      else
+        echo "$(now) [WARN] Compose restart failed."
+      fi
     else
-      echo "$(now) [WARN] Could not return to $ORIG; check your working tree." >&2
+      echo "$(now) [ERROR] git switch \"$BRANCH\" failed."
     fi
   } >>"$OUT" 2>&1
+
+  if clipboard_sink <"$OUT"; then :; else cat "$OUT"; fi
+  rm -f "$OUT" || true
 }
-trap restore EXIT
 
-{
-  echo "$(now) [INFO] Original branch: $ORIG"
-  echo "$(now) [INFO] Switching to branch: $BRANCH"
-
-  if git switch "$BRANCH"; then
-    echo "$(now) [INFO] Restarting containers…"
-    if dc restart; then
-      # Live health wait (180s timeout, 1s poll)
-      wait_for_health_tui 180 1
-      echo "$(now) [INFO] Inspecting unhealthy services (if any)…"
-      show_unhealthy_logs 120
-    else
-      echo "$(now) [WARN] Compose restart failed."
-    fi
-  else
-    echo "$(now) [ERROR] git switch \"$BRANCH\" failed."
-  fi
-} >>"$OUT" 2>&1
-
-# present output (clipboard if opted-in & available)
-if clipboard_sink <"$OUT"; then :; else cat "$OUT"; fi
-rm -f "$OUT" || true
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

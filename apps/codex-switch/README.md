@@ -17,8 +17,9 @@ This lets you preview any branch with its full runtime services in minutes, with
 ## Features
 
 - **Branch selection with smart defaults**:
-  - Shows the most recent PR branch name (via `gh pr list`), dimmed as a placeholder.
+- Shows the most recently updated PR branch name (via `gh pr list`), dimmed as a placeholder. Fallbacks: newest PR from any state or the current branch.
   - If you type/paste a branch name, it uses your input. Pressing `Enter` accepts the placeholder.
+  - In non-interactive shells, automatically uses the placeholder.
 - **Compose restart + health monitoring**:
   - Restarts all Compose services for the chosen branch.
   - Waits for all health-enabled containers to report `healthy` (with a configurable timeout).
