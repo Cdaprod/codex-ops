@@ -1,0 +1,5 @@
+tiers:
+  - name: Supporter
+    price: "$5"
+  - name: Advocate
+    price: "$25"

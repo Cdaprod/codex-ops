@@ -1,0 +1,5 @@
+# Sponsors
+
+{{FUNDING}}
+
+{{TIERS}}
