@@ -1,0 +1,80 @@
+# git-recent-switch: interactive branch selector for `git switch`.
+# Usage: git-recent-switch
+# Example: git-recent-switch  # run inside a Git repository
+
+git-recent-switch() {
+  emulate -L zsh
+  setopt err_return pipefail
+
+  if ! command -v git >/dev/null 2>&1; then
+    print -u2 -- "[grs] git command not found"
+    return 127
+  fi
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    print -u2 -- "[grs] not inside a git repository"
+    return 2
+  fi
+
+  typeset -a recent fallback list
+  typeset -A seen
+
+  while IFS= read -r entry; do
+    [[ $entry == checkout:\ moving\ * ]] || continue
+    typeset branch=${entry##* }
+    if [[ -z ${seen[$branch]-} ]]; then
+      recent+="$branch"
+      seen[$branch]=1
+    fi
+  done < <(git reflog --format='%gs' --date=iso --all 2>/dev/null || true)
+
+  if (( ${#recent[@]} == 0 )); then
+    while IFS= read -r branch; do
+      [[ -n $branch ]] || continue
+      fallback+="$branch"
+    done < <(git for-each-ref --sort=-committerdate refs/heads/ --format='%(refname:short)' 2>/dev/null || true)
+    list=(${fallback[@]})
+  else
+    list=(${recent[@]})
+  fi
+
+  if (( ${#list[@]} == 0 )); then
+    print -u2 -- "[grs] no local branches found"
+    return 1
+  fi
+
+  typeset branch="" selection
+  if [[ -t 0 && -t 1 ]] && command -v fzf >/dev/null 2>&1; then
+    branch=$(print -lr -- ${list[@]} \
+      | fzf --height=20 --border --reverse \
+            --prompt='switch > ' \
+            --preview 'git -c color.ui=always log --oneline -n 12 --decorate --graph {}' \
+            --preview-window=right:70%)
+    [[ -n $branch ]] || return 130
+  else
+    print -r -- "[grs] fzf unavailable; showing numbered menu."
+    integer idx=1
+    for branch in ${list[@]}; do
+      printf '%2d) %s\n' idx "$branch"
+      idx=$((idx+1))
+    done
+    printf 'Pick a branch [1-%d] (Enter cancels): ' ${#list[@]}
+    if ! read -r selection; then
+      print -u2 -- "[grs] no selection received"
+      return 130
+    fi
+    [[ -n $selection ]] || return 130
+    if ! [[ $selection == <-> && $selection -ge 1 && $selection -le ${#list[@]} ]]; then
+      print -u2 -- "[grs] invalid selection"
+      return 1
+    fi
+    branch=${list[$selection]}
+  fi
+
+  if command git switch --quiet -- "$branch"; then
+    print -r -- "[grs] switched to $branch"
+    return 0
+  fi
+
+  return $?
+}
