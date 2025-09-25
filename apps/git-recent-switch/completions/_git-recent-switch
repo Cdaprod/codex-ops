@@ -1,0 +1,9 @@
+# git-recent-switch completion for local branches.
+# Usage: compdef _git-recent-switch git-recent-switch
+# Example: git-recent-switch <TAB>
+
+#compdef git-recent-switch grs
+
+local -a branches
+branches=(${(f)"$(git for-each-ref --sort=-committerdate refs/heads/ --format='%(refname:short)' 2>/dev/null)"})
+_describe 'branch' branches
